@@ -1,0 +1,33 @@
+Sehr geerter Herr Rumpe
+
+Wie ich schon seit längerem weiß, arbeitet ihr Lehrstuhl schon seit
+Längerem an Monticore, einem Tool für die Entwicklung von _embedded
+DSLs_. Ich habe schon seit längerem die Idee für eine solche DSL, die
+ich dann wenn sie mir die Ehre erweisen und die Kooperation anbieten,
+an ihrem Lehrstuhl als Masterarbeit entwickeln würde.
+
+Worum geht es:
+
+Es geht darum, die Entwicklung von Visualisierungen und allgemeinen
+Berechnungen zu beschleunigen. Meiner Erfahrung nach geht immer dann
+wenn ein komplett neuer Renderer für ein beliebiges Problem
+geschrieben werden muss, sehr viel Arbeitszeit darin verloren, die
+Daten aus dem Arbeitsspeicher im Programm auf der GPU genauso verfügbar zu
+machen. Im konkreten beispiel bei OpenGL sieht das wie folgt aus:
+
+Sicht auf die Daten von der c++ Seite:
+
+std::vector<glm::vec4> positions;
+std::vector<glm::vec4> normals;
+
+Sicht auf die Daten von der GLSL Seite (kernel):
+
+attribute vec4 position;
+attribute vec4 normal;
+
+Anbindung der Daten in OpenGL code:
+
+int buffers[2];
+glGenBuffers(buffers, 2);
+glBufferData(buffers[BUFFER_POSITIONS], sizeof(glm::vec4) *
+positions.size(), buffers.data())
