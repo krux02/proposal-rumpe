@@ -1,6 +1,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 #include <GL/glew.h>
+#include <cstdint>
 
 
 std::vector<uint16_t> indices;
@@ -23,6 +24,8 @@ void initializeBuffers() {
 }
 
 
+GLenum myenum;
+
 template <typename T>
 struct Buffer {
   uint32_t handle;
@@ -34,5 +37,8 @@ struct Buffer {
     }
   }
 
-  Buffer(std::vector<T> data) :
+  Buffer(const std::vector<T>& arg) : Buffer(arg.data(), arg.size()) {}
+
+  Buffer(const std::initializer_list<T>& arg) : Buffer(arg.data(), arg.size()) {}
+
 };
