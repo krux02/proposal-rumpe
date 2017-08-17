@@ -1,8 +1,11 @@
 #include <vector>
+#include <cstdio>
+#include <string>
 // #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 #include <glm/mat4x4.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <glm/trigonometric.hpp>
 // Include GLM extensions
 #include <glm/gtc/matrix_transform.hpp>
@@ -12,15 +15,45 @@
 #include <cstdint>
 #include <SDL2/SDL.h>
 
+using glm::float32_t;
+using glm::float64_t;
+using glm::vec3;
+using glm::vec4;
+using glm::mat4;
+
+using std::string;
+using std::fopen;
+using std::size;
+
+uint32_t compileShaderFile(uint32_t shaderType, const char* filename) {
+  FILE* file = fopen(filename, "r");
+  if(file == nullptr) {
+    perror(filename);
+  }
+  string buffer;
+  int character = fgetc(file);
+  while(character != EOF) {
+    buffer += char(character);
+    character = fgetc(file);
+  }
+  fclose(file);
+  auto result = glCreateShader(shaderType);
+
+  const char* cstring[] = {buffer.c_str()};
+  glShaderSource(result, size(cstring), cstring, nullptr);
+  glCompileShader(result);
+  return result;
+}
+
 // let (window, context) = defaultSetup()
 
-glm::vec4 vertices[] = {
+vec4 vertices[] = {
   {-1,-1, 0, 1},
   { 1,-1, 0, 1},
   { 0, 1, 0, 1},
 };
 
-glm::vec4 colors[] = {
+vec4 colors[] = {
   {1,0,0,1},
   {0,1,0,1},
   {0,0,1,1},
@@ -57,25 +90,59 @@ enum struct ProgramId {
 
 uint32_t programs[size_t(ProgramId::Count)];
 
-#include <cstdio>
-#include <string>
 
-uint32_t compileShaderFile(uint32_t shaderType, const char* filename) {
-  FILE* file = std::fopen(filename, "r");
-  std::string buffer;
-  int character = fgetc(file);
-  while(character != EOF) {
-    buffer += char(character);
-    character = fgetc(file);
-  }
-  fclose(file);
-  auto result = glCreateShader(shaderType);
+int helloTriangleLocations[4];
 
-  const char* cstring[] = {buffer.c_str()};
-  glShaderSource(result, std::size(cstring), cstring, nullptr);
-  glCompileShader(result);
-  return result;
-}
+template <typename T>
+struct attribSize {
+  static const int value = 1;
+};
+
+template <>
+struct attribSize<vec4> {
+  static const int value = 4;
+};
+
+template <>
+struct attribSize<vec3> {
+  static const int value = 3;
+};
+
+template <typename T>
+struct attribType {
+  static const int value = -1;
+};
+
+template <>
+struct attribType<int8_t> {
+  static const int value = GL_BYTE;
+};
+
+template <>
+struct attribType<float32_t> {
+  static const int value = GL_FLOAT;
+};
+
+template <>
+struct attribType<float64_t> {
+  static const int value = GL_DOUBLE;
+};
+
+template <>
+struct attribType<vec4> {
+  static const int value = attribType<vec4::value_type>::value;
+};
+
+template <>
+struct attribType<vec3> {
+  static const int value = attribType<vec3::value_type>::value;
+};
+
+template <typename T>
+struct attribNormalized {
+  static const bool value = false;
+};
+
 
 void initializeRendering() {
   { // compile HelloTriangle
@@ -89,35 +156,32 @@ void initializeRendering() {
     glLinkProgram(program);
     programs[size_t(ProgramId::HelloTriangle)] = program;
 
-    int32_t locations[3] = {
-      glGetUniformLocation(program, "modelView"),
-      glGetUniformLocation(program, "proj"),
-      glGetAttributeLocation(program, "a_vertex"),
-    };
-    glEnableAttribute(locations[2]);
-  }
-  {
-    locations1119994[0].index = glGetUniformLocation(program1119990.handle,
-        "modelView")
-    locations1119994[1].index = glGetUniformLocation(program1119990.handle, "proj")
-    vao1119988 = newVertexArrayObject(nil)
-    locations1119994[2] = attributeLocation(program1119990, "a_vertex")
-    if 0 <= locations1119994[2].index:
-      enableAttrib(vao1119988, locations1119994[2])
-      glVertexArrayBindingDivisor(vao1119988.handle, binding(locations1119994[2]).index,
-                                  0)
-    else:
-      writeLine stderr, ["hello_triangle.nim(59,17)(139937078918728, 139937078916432) Hint: unused attribute: a_vertex"]
-    bindAndAttribPointer(vao1119988, vertices, locations1119994[2])
-    locations1119994[3] = attributeLocation(program1119990, "a_color")
-    if 0 <= locations1119994[3].index:
-      enableAttrib(vao1119988, locations1119994[3])
-      glVertexArrayBindingDivisor(vao1119988.handle, binding(locations1119994[3]).index,
-                                  0)
-    else:
-      writeLine stderr, ["hello_triangle.nim(60,17)(139937079199728, 139937079201576) Hint: unused attribute: a_color"]
-    bindAndAttribPointer(vao1119988, colors, locations1119994[3])
+    int32_t* locations = helloTriangleLocations;
+    locations[0] = glGetUniformLocation(program, "modelView");
+    locations[1] = glGetUniformLocation(program, "proj");
+    locations[2] = glGetAttribLocation(program, "a_vertex");
+    locations[3] = glGetAttribLocation(program, "a_color");
 
+    glEnableVertexAttribArray(locations[2]);
+    uint32_t vao;
+    glCreateVertexArrays(1, &vao);
+
+    int32_t loc;
+#define T vec4
+    loc = locations[2];
+    glVertexArrayVertexBuffer(vao, loc, buffers[size_t(BufferId::Vertices)], 0, size_t(sizeof(T)));
+    glVertexArrayAttribFormat(vao, loc, attribSize<T>::value, attribType<T>::value, attribNormalized<T>::value, /* relative offset ?! */ 0);
+    glVertexArrayAttribBinding(vao, loc, 0);  // bind attribute a_vertex to binding index 0
+    glVertexArrayBindingDivisor(vao, 0, 0); // set binding index 0 to divisor 0 (no instancing)
+
+    loc = locations[3];
+    glVertexArrayVertexBuffer(vao, loc, buffers[size_t(BufferId::Vertices)], 0, size_t(sizeof(T)));
+    glVertexArrayAttribFormat(vao, loc, attribSize<T>::value, attribType<T>::value, attribNormalized<T>::value, /* relative offset ?! */ 0);
+    glVertexArrayAttribBinding(vao, loc, 1);  // bind attribute to binding index 1
+    glVertexArrayBindingDivisor(vao, 1, 0);   // set binding index 1 to divisor 0 (no instancing)
+#undef T
+
+    vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)] = vao;
   }
 }
 
@@ -134,15 +198,25 @@ int main() {
   SDL_GLContext context = SDL_GL_CreateContext(window);
   SDL_GL_MakeCurrent(window, context);
 
+  uint32_t err = glewInit();
+  if (GLEW_OK != err) {
+    /* Problem: glewInit failed, something is seriously wrong. */
+    fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
+    exit(EXIT_FAILURE);
+  }
+
+  initializeRendering();
+
   glEnable(GL_DEPTH_TEST); // I wonder why this is by default off.
 
   SDL_Event evt;
   bool runGame = true;
 
   uint64_t startTime = SDL_GetPerformanceCounter();
-  double frequency = double(SDL_GetPerformanceFrequency());
+  float64_t frequency = float64_t(SDL_GetPerformanceFrequency());
 
-  float aspect = float(WindowWidth) / float(WindowHeight);
+  float32_t aspect = float32_t(WindowWidth) / float32_t(WindowHeight);
+  mat4 proj = glm::perspective(90.0f, aspect, 0.01f, 1000.0f);
   double time;
   while(runGame) {
 
@@ -159,13 +233,13 @@ int main() {
 
     time = double(SDL_GetPerformanceCounter() - startTime) / frequency;
 
-    glm::mat4 viewMat = glm::mat4(1);
-    viewMat = translate(viewMat, glm::vec3(0,1,5));
+    mat4 viewMat = mat4(1);
+    viewMat = translate(viewMat, vec3(0,1,5));
     viewMat = inverse(viewMat);
 
-    glm::mat4 modelMat = glm::mat4(1);
-    modelMat = rotate(modelMat, M_PI * -0.05, 0, 1, 0);
-    modelMat = scale(modelMat, 3,3,3);
+    mat4 modelMat = mat4(1.0f);
+    modelMat = rotate(modelMat, float32_t(M_PI * -0.05), vec3(0.0f, 1.0f, 0.0f));
+    modelMat = scale(modelMat, vec3(3.0f, 3.0f, 3.0f));
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -173,12 +247,37 @@ int main() {
     // START HERE WITH THE VERTEX ARRAY OBJECT !!!
 
 
+    {
+      auto program = programs[size_t(ProgramId::HelloTriangle)];
+      auto vao = vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)];
+      int32_t* locations = helloTriangleLocations;
+
+      glUseProgram(program);
+      glBindVertexArray(vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)]);
+      glVertexArrayElementBuffer(vao, buffers[size_t(BufferId::Indices)]);
+
+      auto modelViewMat = viewMat * modelMat;
+      glProgramUniformMatrix4fv(program, locations[0], 1, false, value_ptr(modelViewMat));
+      glProgramUniformMatrix4fv(program, locations[1], 1, false, value_ptr(proj));
+
+
+      glVertexArrayVertexBuffer(vao, locations[2], buffers[size_t(BufferId::Vertices)], 0, sizeof(vec4));
+      glVertexArrayVertexBuffer(vao, locations[3], buffers[size_t(BufferId::Colors)], 0, sizeof(vec4));
+
+      glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, reinterpret_cast<void *>(0));
+      glBindVertexArray(0);
+      glUseProgram(0);
+    }
 
     SDL_GL_SwapWindow(window);
   }
+
 }
 
 
+
+
+#if 0
 
 var evt: Event
 var runGame: bool = true
@@ -221,16 +320,16 @@ while runGame:
       a_vertex = vertices
       a_color  = colors
     vertexMain:
-      """
+      //"""
       gl_Position = proj * modelView * a_vertex;
       v_color = a_color;
-      """
+      //"""
     vertexOut:
       "out vec4 v_color"
     fragmentMain:
-      """
+//"""
       color = v_color;
-      """
+//"""
 
   glSwapWindow(window)
 
@@ -297,12 +396,6 @@ extensions loaded
 
 nim-compile finished at Wed Aug 16 19:42:20
 
-
-
-std::vector<uint16_t> indices;
-std::vector<glm::vec4> positions;
-std::vector<glm::vec4> normals;
-
 enum BufferNames {
   Buffer_Indices,
   Buffer_Positions,
@@ -310,7 +403,6 @@ enum BufferNames {
   Buffer_Count
 };
 
-#if 1
 void initializeBuffers() {
   uint32_t buffers[Buffer_Count]; // handles for buffers
   glCreateBuffers(Buffer_Count, buffers);
@@ -321,32 +413,14 @@ void initializeBuffers() {
 
 
   glNamedBufferData(buffers[Buffer_Indices],   indices.size() * sizeof(uint16_t), indices.data(), 0);
-  glNamedBufferData(buffers[Buffer_Positions], positions.size() * sizeof(glm::vec4), positions.data(), 0);
+  glNamedBufferData(buffers[Buffer_Positions], positions.size() * sizeof(vec4), positions.data(), 0);
 
 
 
-  glNamedBufferData(buffers[Buffer_Normals],   normals.size() * sizeof(glm::vec4), normals.data(), 0);
+  glNamedBufferData(buffers[Buffer_Normals],   normals.size() * sizeof(vec4), normals.data(), 0);
 }
 
-
 GLenum myenum;
-
-template <typename T>
-struct Buffer {
-  uint32_t handle;
-
-  Buffer(T* data, ssize_t N) {
-    glCreateBuffers(1, &handle);
-    if( N > 0 ) {
-      glNamedBufferData(handle, N * sizeof(T), data, 0);
-    }
-  }
-
-  Buffer(const std::vector<T>& arg) : Buffer(arg.data(), arg.size()) {}
-
-  Buffer(const std::initializer_list<T>& arg) : Buffer(arg.data(), arg.size()) {}
-};
-#endif
 
 #include <cstdio>
 
@@ -372,3 +446,5 @@ int main(int argc, char* argv[], char** env) {
     puts(env[i]);
   }
 }
+
+#endif
