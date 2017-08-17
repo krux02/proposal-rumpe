@@ -34,6 +34,93 @@ uint16_t indices[] = {
 const int32_t WindowWidth = 640;
 const int32_t WindowHeight = 480;
 
+enum struct BufferId {
+  Vertices,
+  Colors,
+  Indices,
+  Count,
+};
+
+int32_t buffers[size_t(BufferId::Count)];
+
+enum struct VertexArrayObjectId {
+  HelloTriangle,
+  Count,
+};
+
+int32_t vertexArrayObjects[size_t(VertexArrayObjectId::Count)];
+
+enum struct ProgramId {
+  HelloTriangle,
+  Count,
+};
+
+uint32_t programs[size_t(ProgramId::Count)];
+
+#include <cstdio>
+#include <string>
+
+uint32_t compileShaderFile(uint32_t shaderType, const char* filename) {
+  FILE* file = std::fopen(filename, "r");
+  std::string buffer;
+  int character = fgetc(file);
+  while(character != EOF) {
+    buffer += char(character);
+    character = fgetc(file);
+  }
+  fclose(file);
+  auto result = glCreateShader(shaderType);
+
+  const char* cstring[] = {buffer.c_str()};
+  glShaderSource(result, std::size(cstring), cstring, nullptr);
+  glCompileShader(result);
+  return result;
+}
+
+void initializeRendering() {
+  { // compile HelloTriangle
+    auto program = glCreateProgram();
+    auto vertexShader = compileShaderFile(GL_VERTEX_SHADER, "hello_triangle.vert");
+    glAttachShader(program, vertexShader);
+    glDeleteShader(vertexShader);
+    auto fragmentShader = compileShaderFile(GL_FRAGMENT_SHADER, "hello_triangle.frag");
+    glAttachShader(program, fragmentShader);
+    glDeleteShader(fragmentShader);
+    glLinkProgram(program);
+    programs[size_t(ProgramId::HelloTriangle)] = program;
+
+    int32_t locations[3] = {
+      glGetUniformLocation(program, "modelView"),
+      glGetUniformLocation(program, "proj"),
+      glGetAttributeLocation(program, "a_vertex"),
+    };
+    glEnableAttribute(locations[2]);
+  }
+  {
+    locations1119994[0].index = glGetUniformLocation(program1119990.handle,
+        "modelView")
+    locations1119994[1].index = glGetUniformLocation(program1119990.handle, "proj")
+    vao1119988 = newVertexArrayObject(nil)
+    locations1119994[2] = attributeLocation(program1119990, "a_vertex")
+    if 0 <= locations1119994[2].index:
+      enableAttrib(vao1119988, locations1119994[2])
+      glVertexArrayBindingDivisor(vao1119988.handle, binding(locations1119994[2]).index,
+                                  0)
+    else:
+      writeLine stderr, ["hello_triangle.nim(59,17)(139937078918728, 139937078916432) Hint: unused attribute: a_vertex"]
+    bindAndAttribPointer(vao1119988, vertices, locations1119994[2])
+    locations1119994[3] = attributeLocation(program1119990, "a_color")
+    if 0 <= locations1119994[3].index:
+      enableAttrib(vao1119988, locations1119994[3])
+      glVertexArrayBindingDivisor(vao1119988.handle, binding(locations1119994[3]).index,
+                                  0)
+    else:
+      writeLine stderr, ["hello_triangle.nim(60,17)(139937079199728, 139937079201576) Hint: unused attribute: a_color"]
+    bindAndAttribPointer(vao1119988, colors, locations1119994[3])
+
+  }
+}
+
 int main() {
 
   SDL_Init(SDL_INIT_EVERYTHING);
@@ -86,8 +173,9 @@ int main() {
     // START HERE WITH THE VERTEX ARRAY OBJECT !!!
 
 
-  }
 
+    SDL_GL_SwapWindow(window);
+  }
 }
 
 
@@ -153,88 +241,7 @@ var vao1119988: VertexArrayObject
   var locations1119994: array[4, Location]
   glPushDebugGroup(GL_DEBUG_SOURCE_THIRD_PARTY, 1, 10, "shadingDsl")
   if isNil(program1119990):
-    program1119990.handle = glCreateProgram()
-    glAttachShader(program1119990.handle, compileShader(GL_VERTEX_SHADER, "#version 330
-#extension GL_ARB_enhanced_layouts : enable
-#define M_PI 3.1415926535897932384626433832795
-uniform mat4x4 modelView;
-uniform mat4x4 proj;
-in vec4 a_vertex;
-in vec4 a_color;
-out vec4 v_color;
-void main() {
-////////////////////////////////////////////////////////////////////////////////
-//                            user code begins here                           //
-      gl_Position = proj * modelView * a_vertex;
-      v_color = a_color;
 
-//                            user code ends here                             //
-////////////////////////////////////////////////////////////////////////////////
-
-}
-", LineInfo(
-        filename: "hello_triangle.nim(62,6)", line: 139937079330408,
-        column: 139937079331080)).handle)
-    glDeleteShader(compileShader(GL_VERTEX_SHADER, "#version 330
-#extension GL_ARB_enhanced_layouts : enable
-#define M_PI 3.1415926535897932384626433832795
-uniform mat4x4 modelView;
-uniform mat4x4 proj;
-in vec4 a_vertex;
-in vec4 a_color;
-out vec4 v_color;
-void main() {
-////////////////////////////////////////////////////////////////////////////////
-//                            user code begins here                           //
-      gl_Position = proj * modelView * a_vertex;
-      v_color = a_color;
-
-//                            user code ends here                             //
-////////////////////////////////////////////////////////////////////////////////
-
-}
-", LineInfo(
-        filename: "hello_triangle.nim(62,6)", line: 139937079330408,
-        column: 139937079331080)).handle)
-    glAttachShader(program1119990.handle, compileShader(GL_FRAGMENT_SHADER, "#version 330
-#extension GL_ARB_enhanced_layouts : enable
-#define M_PI 3.1415926535897932384626433832795
-uniform mat4x4 modelView;
-uniform mat4x4 proj;
-in vec4 v_color;
-layout(location = 0) out vec4 color;
-void main() {
-////////////////////////////////////////////////////////////////////////////////
-//                            user code begins here                           //
-      color = v_color;
-
-//                            user code ends here                             //
-////////////////////////////////////////////////////////////////////////////////
-
-}
-", LineInfo(
-        filename: "hello_triangle.nim(69,6)", line: 139937079390504,
-        column: 139937079390616)).handle)
-    glDeleteShader(compileShader(GL_FRAGMENT_SHADER, "#version 330
-#extension GL_ARB_enhanced_layouts : enable
-#define M_PI 3.1415926535897932384626433832795
-uniform mat4x4 modelView;
-uniform mat4x4 proj;
-in vec4 v_color;
-layout(location = 0) out vec4 color;
-void main() {
-////////////////////////////////////////////////////////////////////////////////
-//                            user code begins here                           //
-      color = v_color;
-
-//                            user code ends here                             //
-////////////////////////////////////////////////////////////////////////////////
-
-}
-", LineInfo(
-        filename: "hello_triangle.nim(69,6)", line: 139937079390504,
-        column: 139937079390616)).handle)
-    glLinkProgram(program1119990.handle)
     if not linkStatus(program1119990):
       echo ["Log: ", infoLog(program1119990)]
       glDeleteProgram(program1119990.handle)
