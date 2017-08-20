@@ -25,7 +25,13 @@ using std::string;
 using std::fopen;
 using std::size;
 
-uint32_t compileShaderFile(uint32_t shaderType, const char* filename) {
+auto compilationFailed(uint32_t shader) -> bool {
+  int32_t status;
+  glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+  return status != 0;
+}
+
+auto compileShaderFile(uint32_t shaderType, const char* filename) -> uint32_t {
   FILE* file = fopen(filename, "r");
   if(file == nullptr) {
     perror(filename);
@@ -42,6 +48,11 @@ uint32_t compileShaderFile(uint32_t shaderType, const char* filename) {
   const char* cstring[] = {buffer.c_str()};
   glShaderSource(result, size(cstring), cstring, nullptr);
   glCompileShader(result);
+
+  if(compilationFailed(result)) {
+    printf("compilation failed");
+  }
+
   return result;
 }
 
@@ -143,8 +154,92 @@ struct attribNormalized {
   static const bool value = false;
 };
 
+void debugCallback(uint32_t source, uint32_t type, uint32_t id, uint32_t severity, int32_t length, const char* message, const void* userPointer) {
+  if(severity == GL_DEBUG_SEVERITY_NOTIFICATION) {
+    return;
+  }
 
-void initializeRendering() {
+  puts("gl-debug-callback:");
+  printf("  message: %s\n", message);  //"
+
+  puts("  source: ");
+  switch(source) {
+  case GL_DEBUG_SOURCE_API:
+    puts("api");
+    break;
+  case GL_DEBUG_SOURCE_WINDOW_SYSTEM:
+    puts("window system");
+    break;
+  case GL_DEBUG_SOURCE_SHADER_COMPILER:
+    puts("shader compiler");
+    break;
+  case GL_DEBUG_SOURCE_THIRD_PARTY:
+    puts("third party");
+    break;
+  case GL_DEBUG_SOURCE_APPLICATION:
+    puts("application");
+    break;
+  case GL_DEBUG_SOURCE_OTHER:
+    puts("other");
+    break;
+  default:
+    printf(" %d ???", int(source)); //"
+  }
+
+  puts("  type: ");
+  switch(type) {
+  case GL_DEBUG_TYPE_ERROR:
+    puts("error");
+    break;
+  case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR:
+    puts("deprecated behavior");
+    break;
+  case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR:
+    puts("undefined behavior"); //"
+    break;
+  case GL_DEBUG_TYPE_PORTABILITY:
+    puts("portability");
+    break;
+  case GL_DEBUG_TYPE_PERFORMANCE:
+    puts("performance");
+    break;
+  case GL_DEBUG_TYPE_MARKER:
+    puts("marker");
+    break;
+  case GL_DEBUG_TYPE_PUSH_GROUP:
+    puts("push group");
+    break;
+  case GL_DEBUG_TYPE_POP_GROUP:
+    puts("pop group");
+    break;
+  case GL_DEBUG_TYPE_OTHER:
+    puts("other");
+    break;
+  default:
+    printf(" %d ???", type);
+  }
+
+  printf("  id: %d", id); //"
+  puts("  severity: ");
+  switch(severity) {
+  case GL_DEBUG_SEVERITY_LOW:
+    puts("low");
+    break;
+  case GL_DEBUG_SEVERITY_MEDIUM:
+    puts("medium");
+    break;
+  case GL_DEBUG_SEVERITY_HIGH:
+    puts("high");
+    break;
+  case GL_DEBUG_SEVERITY_NOTIFICATION:
+    puts("notification");
+    break;
+  default:
+    printf("¿ %d ?", int(severity));
+  }
+}
+
+auto initializeRendering() {
   { // compile HelloTriangle
     auto program = glCreateProgram();
     auto vertexShader = compileShaderFile(GL_VERTEX_SHADER, "hello_triangle.vert");
@@ -185,15 +280,25 @@ void initializeRendering() {
   }
 }
 
+
 int main() {
 
   SDL_Init(SDL_INIT_EVERYTHING);
 
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+  int32_t contextFlags = SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG | SDL_GL_CONTEXT_DEBUG_FLAG;
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS        , contextFlags);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK , SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE         , 8);
 
   SDL_Window* window = SDL_CreateWindow("example", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                  WindowWidth, WindowHeight, SDL_WINDOW_OPENGL);
 
-  assert(window);
+  if (not window) {
+    puts(SDL_GetError());
+    exit(EXIT_FAILURE);
+  }
 
   SDL_GLContext context = SDL_GL_CreateContext(window);
   SDL_GL_MakeCurrent(window, context);
@@ -204,6 +309,9 @@ int main() {
     fprintf(stderr, "Error: %s\n", glewGetErrorString(err));
     exit(EXIT_FAILURE);
   }
+
+  glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
+  glDebugMessageCallbackARB(debugCallback, nullptr);
 
   initializeRendering();
 
@@ -267,6 +375,10 @@ int main() {
       glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, reinterpret_cast<void *>(0));
       glBindVertexArray(0);
       glUseProgram(0);
+    }
+
+    if(auto err = glGetError()) {
+      printf("Error: %s\n", glGetString(err));
     }
 
     SDL_GL_SwapWindow(window);
