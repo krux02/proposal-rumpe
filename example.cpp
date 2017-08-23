@@ -22,6 +22,9 @@ using glm::vec4;
 using glm::mat4;
 
 using std::string;
+using std::begin;
+using std::fill;
+using std::end;
 using std::fopen;
 using std::size;
 using std::data;
@@ -150,7 +153,7 @@ uint32_t compileShaderFile(uint32_t shaderType, cstring filename) {
       fprintf(stderr, "no log :'(\n");
     }
     exit(EXIT_FAILURE);
- }
+  }
 
   glObjectLabel(GL_SHADER, result, -1, filename);
 
@@ -213,6 +216,10 @@ struct AttribNormalized {
 
 template <typename T>
 struct ArrayBuffer {
+  /// the array buffer is supposed to be a type that is very similar
+  /// to std::vector, just with the difference that the data is stored
+  /// on the memory of the GPU and it can easily be used as attributes
+  /// for vertex shaders.
   uint32_t id = 0;
 
   int32_t valueByteSize() {
@@ -245,12 +252,31 @@ struct ArrayBuffer {
 ArrayBuffer<vec4> vertices, colors;
 ArrayBuffer<uint16_t> indices;
 
-enum struct VertexArrayObjectId {
-  HelloTriangle,
-  Count,
-};
+void initializeBuffersWithData() {
+  // initialize Buffers that are later bound to the attributes
+  vertices = {
+    {-1,-1, 0, 1},
+    { 1,-1, 0, 1},
+    { 0, 1, 0, 1},
+  };
+  glObjectLabel(GL_BUFFER, vertices.id, -1, "vertices");
 
-uint32_t vertexArrayObjects[size_t(VertexArrayObjectId::Count)];
+  colors = {
+    {1,0,0,1},
+    {0,1,0,1},
+    {0,0,1,1},
+  };
+  glObjectLabel(GL_BUFFER, colors.id, -1, "colors");
+
+  indices = {
+    0, 1, 2,
+  };
+  glObjectLabel(GL_BUFFER, indices.id, -1, "indices");
+}
+
+////////////////////
+// generated code //
+////////////////////
 
 enum struct ProgramId {
   HelloTriangle,
@@ -260,53 +286,70 @@ enum struct ProgramId {
 int32_t programLocationsList[4];
 int32_t programLocationOffsets[size_t(ProgramId::Count)] = {0};
 uint32_t programs[size_t(ProgramId::Count)];
+uint32_t vertexArrayObjects[size_t(ProgramId::Count)];
 
-void initializeRendering() {
-  { // initialize Buffers that are later bound to the attributes
-    vertices = {
-      {-1,-1, 0, 1},
-      { 1,-1, 0, 1},
-      { 0, 1, 0, 1},
-    };
-    glObjectLabel(GL_BUFFER, vertices.id, -1, "vertices");
+// The instanciation of SHADING_DSL should actually depend of the
+// argument.  just to make this example compileable, this is the code
+// that should be generated for the single instance shown
+// below. Simply generating this code would not be enough.
 
-    colors = {
-      {1,0,0,1},
-      {0,1,0,1},
-      {0,0,1,1},
-    };
-    glObjectLabel(GL_BUFFER, colors.id, -1, "colors");
-
-    indices = {
-      0, 1, 2,
-    };
-    glObjectLabel(GL_BUFFER, indices.id, -1, "indices");
+#define SHADING_DSL(SRL) {                                              \
+    auto program = programs[size_t(ProgramId::HelloTriangle)];          \
+    auto vao = vertexArrayObjects[size_t(ProgramId::HelloTriangle)];    \
+    int32_t* locations = programLocationsList +                         \
+      programLocationOffsets[size_t(ProgramId::HelloTriangle)];         \
+    glUseProgram(program);                                              \
+    glBindVertexArray(vertexArrayObjects[size_t(ProgramId::HelloTriangle)]); \
+    glVertexArrayElementBuffer(vao, indices.id);                        \
+    auto modelViewMat = viewMat * modelMat;                             \
+    glProgramUniformMatrix4fv(program, locations[0], 1, false, value_ptr(modelViewMat)); \
+    glProgramUniformMatrix4fv(program, locations[1], 1, false, value_ptr(proj)); \
+    glVertexArrayVertexBuffer(vao, 0, vertices.id, 0, sizeof(vec4));    \
+    glVertexArrayVertexBuffer(vao, 1, colors.id, 0, sizeof(vec4));      \
+    glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, reinterpret_cast<void *>(0)); \
+    glBindVertexArray(0);                                               \
+    glUseProgram(0);                                                    \
   }
 
+// This function can actually be generated. It should generate and
+// compile all progrms. Here are some shader files, that should be
+// generated as well.
+
+void compileShaderPrograms() {
+  // -1 is the location, in case the attribute/uniform has been optimized away
+  fill(begin(programLocationsList), end(programLocationsList), -1);
+
   { // compile HelloTriangle
-    auto program = glCreateProgram();
-    auto vertexShader = compileShaderFile(GL_VERTEX_SHADER, "hello_triangle.vert");
+    uint32_t program = glCreateProgram();
+    uint32_t vertexShader = compileShaderFile(GL_VERTEX_SHADER, "hello_triangle.vert");
     glAttachShader(program, vertexShader);
+    // This does not actually delete the shader, it just decrements
+    // the internal reference counter, The Shader is deleted when it
+    // is not needed anymore by the program.
     glDeleteShader(vertexShader);
-    auto fragmentShader = compileShaderFile(GL_FRAGMENT_SHADER, "hello_triangle.frag");
+    uint32_t fragmentShader = compileShaderFile(GL_FRAGMENT_SHADER, "hello_triangle.frag");
     glAttachShader(program, fragmentShader);
     glDeleteShader(fragmentShader);
     glLinkProgram(program);
+    // label for better debugging
     glObjectLabel(GL_PROGRAM, program, -1, "HelloTriangle");
 
+    // Store program in global program array, so that it can be used anywhere..
     programs[size_t(ProgramId::HelloTriangle)] = program;
 
-    int32_t* locations = programLocationsList + programLocationOffsets[size_t(ProgramId::HelloTriangle)];
-    locations[0] = glGetUniformLocation(program, "modelView");
-    locations[1] = glGetUniformLocation(program, "proj");
-    locations[2] = glGetAttribLocation(program, "a_vertex");
-    locations[3] = glGetAttribLocation(program, "a_color");
+    int32_t* uniformLocations = programLocationsList + programLocationOffsets[size_t(ProgramId::HelloTriangle)];
+    int32_t* attributeLocations = uniformLocations + 2;
+
+    uniformLocations[0] = glGetUniformLocation(program, "modelView");
+    uniformLocations[1] = glGetUniformLocation(program, "proj");
+    attributeLocations[0] = glGetAttribLocation(program, "a_vertex");
+    attributeLocations[1] = glGetAttribLocation(program, "a_color");
 
     uint32_t vao;
     glCreateVertexArrays(1, &vao);
 
     { // setup vertices attribute
-      int32_t loc = locations[2];
+      int32_t loc = attributeLocations[0];
       glVertexArrayVertexBuffer(vao, loc, vertices.id, 0, vertices.valueByteSize() );
       auto attribSizeValue = vertices.attribSize();
       auto attribTypeValue = vertices.attribType();
@@ -317,7 +360,7 @@ void initializeRendering() {
       glEnableVertexArrayAttrib(vao, 0);
     }
     { // setup colors attribute
-      int32_t loc = locations[3];
+      int32_t loc = attributeLocations[1];
       glVertexArrayVertexBuffer(vao, loc, colors.id, 0, colors.valueByteSize());
       auto attribSizeValue = colors.attribSize();
       auto attribTypeValue = colors.attribType();
@@ -327,11 +370,17 @@ void initializeRendering() {
       glVertexArrayBindingDivisor(vao,     1, 0);  // set binding index 1 to divisor 0 (no instancing)
       glEnableVertexArrayAttrib(vao, 1);
     }
-    vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)] = vao;
+    vertexArrayObjects[size_t(ProgramId::HelloTriangle)] = vao;
   }
 }
 
+//////////
+// main //
+//////////
+
 int32_t main() {
+
+  // initialize an OpenGL context and window with SDL functions.
 
   SDL_Init(SDL_INIT_EVERYTHING);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -359,19 +408,33 @@ int32_t main() {
     exit(EXIT_FAILURE);
   }
 
+  // Very helpful to detect errors in OpenGL code.
+
   glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
   glDebugMessageCallbackARB(debugCallback, nullptr);
 
-  initializeRendering();
+  // In OpenGL the compiler of the shader files is actually part of
+  // the OpenGL driver implementation. Therefore all shader files need
+  // to be compiled at runtime from the program.
 
-  glEnable(GL_DEPTH_TEST); // I wonder why this is by default off.
+  compileShaderPrograms();
+
+  // This would normally load 3D models and textures from files. For
+  // the sake of simplicity it is all just some arrays in code
+  initializeBuffersWithData();
+
+  // This enables occlusion by distance, otherwise it is occlusion by
+  // draw order.
+  glEnable(GL_DEPTH_TEST);
 
   SDL_Event evt;
   bool runGame = true;
 
+  // Easy setup to measure time.
   uint64_t startTime = SDL_GetPerformanceCounter();
   float64_t frequency = float64_t(SDL_GetPerformanceFrequency());
 
+  // This matrix does perspective distortion on the 3D geometry. Even though this matrix is called projection matrix, it is an invertible matrix.
   mat4 proj;
   {
     int32_t windowWidth, windowHeight;
@@ -395,41 +458,47 @@ int32_t main() {
 
     time = float64_t(SDL_GetPerformanceCounter() - startTime) / frequency;
 
+    /// The ``viewMat`` is the inverted object matrix of the camera
     mat4 viewMat = mat4(1);
-    viewMat = translate(viewMat, vec3(0,1,5));
-    viewMat = inverse(viewMat);
+    viewMat = translate(viewMat, vec3(0,1,5));  // put tha cameare at position 0 1 5
+    viewMat = inverse(viewMat);                 // invert it to make it a view matrix.
 
+    /// The ``modelMat`` is the object matrix of the object to be
+    /// shown, in this case the spinning triangle.
     mat4 modelMat = mat4(1.0f);
+    // To make the triangle spin the rotation angle is the time.
     modelMat = rotate(modelMat, float32_t(time), vec3(0.0f, 1.0f, 0.0f));
+    // Make it big, so it is visible.
     modelMat = scale(modelMat, vec3(3.0f, 3.0f, 3.0f));
 
+    // Clear the screen for redraw.
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    {
-      auto program = programs[size_t(ProgramId::HelloTriangle)];
-      auto vao = vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)];
-      int32_t* locations = programLocationsList + programLocationOffsets[size_t(ProgramId::HelloTriangle)];
+    // The rendering code for 3D geometry can be quite trivial, when
+    // no fancy rendering techniques are used.
+    SHADING_DSL(R"dsl(
+      uniforms {
+        modelView = modelViewMat;
+        proj = proj;
+      }
+      attributs{
+        a_vertex = vertices;
+        a_color = colors;
+      }
+      vertexMain{
+        gl_Position = proj * modelView * a_vertex;
+        v_color = a_color;
+      }
+      vertexOut{
+        out vec4 v_color;
+      }
+      fragmentMain{
+        color = v_color;
+      }
+    )dsl");
 
-      glUseProgram(program);
-      glBindVertexArray(vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)]);
-      glVertexArrayElementBuffer(vao, indices.id);
 
-      auto modelViewMat = viewMat * modelMat;
-      glProgramUniformMatrix4fv(program, locations[0], 1, false, value_ptr(modelViewMat));
-      glProgramUniformMatrix4fv(program, locations[1], 1, false, value_ptr(proj));
-
-      glVertexArrayVertexBuffer(vao, 0, vertices.id, 0, sizeof(vec4));
-      glVertexArrayVertexBuffer(vao, 1, colors.id, 0, sizeof(vec4));
-
-      glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, reinterpret_cast<void *>(0));
-      glBindVertexArray(0);
-      glUseProgram(0);
-    }
-
-    if(auto err = glGetError()) {
-      printf("Error: %s\n", glGetString(err));
-    }
-
+    // make everything visible on screen
     SDL_GL_SwapWindow(window);
   }
 }
