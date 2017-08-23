@@ -481,7 +481,7 @@ int32_t main() {
         modelView = modelViewMat;
         proj = proj;
       }
-      attributs{
+      attributes{
         a_vertex = vertices;
         a_color = colors;
       }

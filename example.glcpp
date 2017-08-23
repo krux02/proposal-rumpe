@@ -35,6 +35,8 @@ using cstring = const char*;
 
 void shading(cstring dslcode);
 
+void compilePrograms();
+
 //////////////////////////////
 // opengl utility functions //
 //////////////////////////////
@@ -232,10 +234,6 @@ struct ArrayBuffer {
     glNamedBufferData(id, size(args) * sizeof(*data(args)), data(args), GL_STATIC_DRAW);
   }
 
-  void setLabel(cstring label) {
-    glObjectLabel(GL_BUFFER, id, -1, label);
-  }
-
   int32_t attribSize() {
     return AttribSize<T>::value;
   }
@@ -272,27 +270,33 @@ int32_t programLocationsList[4];
 int32_t programLocationOffsets[size_t(ProgramId::Count)] = {0};
 uint32_t programs[size_t(ProgramId::Count)];
 
+void initializeBuffers() {
+  // Normally this would read data from some mesh files.
+
+  vertices = {
+    {-1,-1, 0, 1},
+    { 1,-1, 0, 1},
+    { 0, 1, 0, 1},
+  };
+  glObjectLabel(GL_BUFFER, vertices.id, -1, "vertices");
+
+  colors = {
+    {1,0,0,1},
+    {0,1,0,1},
+    {0,0,1,1},
+  };
+  glObjectLabel(GL_BUFFER, colors.id, -1, "colors");
+
+  indices = {
+    0, 1, 2,
+  };
+  glObjectLabel(GL_BUFFER, indices.id, -1, "indices");
+}
+
+
+
 void initializeRendering() {
-  { // initialize Buffers that are later bound to the attributes
-    vertices = {
-      {-1,-1, 0, 1},
-      { 1,-1, 0, 1},
-      { 0, 1, 0, 1},
-    };
-    vertices.setLabel("vertices");
-
-    colors = {
-      {1,0,0,1},
-      {0,1,0,1},
-      {0,0,1,1},
-    };
-    colors.setLabel("colors");
-
-    indices = {
-      0, 1, 2,
-    };
-    indices.setLabel("indices");
-  }
+  initializeBuffers();
 
   { // compile HelloTriangle
     auto program = glCreateProgram();
@@ -416,15 +420,15 @@ int32_t main() {
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    auto modelViewMat = viewMat * modelMat;
+    mat4 modelViewMat = viewMat * modelMat;
     shading(R"dsl(
       uniforms{
         modelView = modelViewMat;
-        proj = proj
+        proj = proj;
       }
       attributs{
-        a_vertex;
-        a_color;
+        a_vertex = vertices;
+        a_color = colors;
       }
       vertexMain{
         gl_Position = proj * modelView * a_vertex;
@@ -437,26 +441,6 @@ int32_t main() {
         color = v_color;
       }
     )dsl");
-    {
-      auto program = programs[size_t(ProgramId::HelloTriangle)];
-      auto vao = vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)];
-      int32_t* locations = programLocationsList + programLocationOffsets[size_t(ProgramId::HelloTriangle)];
-
-      glUseProgram(program);
-      glBindVertexArray(vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)]);
-      glVertexArrayElementBuffer(vao, indices.id);
-
-
-      glProgramUniformMatrix4fv(program, locations[0], 1, false, value_ptr(modelViewMat));
-      glProgramUniformMatrix4fv(program, locations[1], 1, false, value_ptr(proj));
-
-      glVertexArrayVertexBuffer(vao, 0, vertices.id, 0, sizeof(vec4));
-      glVertexArrayVertexBuffer(vao, 1, colors.id, 0, sizeof(vec4));
-
-      glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, reinterpret_cast<void *>(0));
-      glBindVertexArray(0);
-      glUseProgram(0);
-    }
 
     if(auto err = glGetError()) {
       printf("Error: %s\n", glGetString(err));
