@@ -225,10 +225,6 @@ struct ArrayBuffer {
     glNamedBufferData(id, size(args) * sizeof(*data(args)), data(args), GL_STATIC_DRAW);
   }
 
-  void setLabel(cstring label) {
-    glObjectLabel(GL_BUFFER, id, -1, label);
-  }
-
   int32_t attribSize() {
     return AttribSize<T>::value;
   }
@@ -272,19 +268,19 @@ void initializeRendering() {
       { 1,-1, 0, 1},
       { 0, 1, 0, 1},
     };
-    vertices.setLabel("vertices");
+    glObjectLabel(GL_BUFFER, vertices.id, -1, "vertices");
 
     colors = {
       {1,0,0,1},
       {0,1,0,1},
       {0,0,1,1},
     };
-    colors.setLabel("colors");
+    glObjectLabel(GL_BUFFER, colors.id, -1, "colors");
 
     indices = {
       0, 1, 2,
     };
-    indices.setLabel("indices");
+    glObjectLabel(GL_BUFFER, indices.id, -1, "indices");
   }
 
   { // compile HelloTriangle
