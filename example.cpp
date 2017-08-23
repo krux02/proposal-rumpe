@@ -26,11 +26,13 @@ using std::fopen;
 using std::size;
 using std::data;
 
+using cstring = const char*;
+
 //////////////////////////////
 // opengl utility functions //
 //////////////////////////////
 
-void debugCallback(uint32_t source, uint32_t type, uint32_t id, uint32_t severity, int32_t length, const char* message, const void* userPointer) {
+void debugCallback(uint32_t source, uint32_t type, uint32_t id, uint32_t severity, int32_t length, cstring message, const void* userPointer) {
   if(severity == GL_DEBUG_SEVERITY_NOTIFICATION) {
     return;
   }
@@ -58,7 +60,7 @@ void debugCallback(uint32_t source, uint32_t type, uint32_t id, uint32_t severit
     puts("  source: other");
     break;
   default:
-    printf("  source: %d ???", int(source)); //"
+    printf("  source: %d ???", source); //"
   }
 
   switch(type) {
@@ -108,18 +110,18 @@ void debugCallback(uint32_t source, uint32_t type, uint32_t id, uint32_t severit
     puts("  severity: notification");
     break;
   default:
-    printf("  severity: %d ???", int(severity));
+    printf("  severity: %d ???", severity);
   }
 }
 
-uint32_t compileShaderFile(uint32_t shaderType, const char* filename) {
+uint32_t compileShaderFile(uint32_t shaderType, cstring filename) {
   FILE* file = fopen(filename, "r");
   if(file == nullptr) {
     perror(filename);
     exit(EXIT_FAILURE);
   }
   string buffer;
-  int character = fgetc(file);
+  int32_t character = fgetc(file);
   while(character != EOF) {
     buffer += char(character);
     character = fgetc(file);
@@ -127,7 +129,7 @@ uint32_t compileShaderFile(uint32_t shaderType, const char* filename) {
   fclose(file);
   auto result = glCreateShader(shaderType);
 
-  const char* cstring[] = {buffer.c_str()};
+  cstring cstring[] = {buffer.c_str()};
   glShaderSource(result, size(cstring), cstring, nullptr);
   glCompileShader(result);
 
@@ -156,110 +158,133 @@ uint32_t compileShaderFile(uint32_t shaderType, const char* filename) {
 }
 
 template <typename T>
-struct attribSize {
-  static const int value = 1;
+struct AttribSize {
+  static const int32_t value = 1;
 };
 
 template <>
-struct attribSize<vec4> {
-  static const int value = 4;
+struct AttribSize<vec4> {
+  static const int32_t value = 4;
 };
 
 template <>
-struct attribSize<vec3> {
-  static const int value = 3;
+struct AttribSize<vec3> {
+  static const int32_t value = 3;
 };
 
 template <typename T>
-struct attribType {
-  static const int value = -1;
+struct AttribType {
+  static const int32_t value = -1;
 };
 
 template <>
-struct attribType<int8_t> {
-  static const int value = GL_BYTE;
+struct AttribType<int8_t> {
+  static const int32_t value = GL_BYTE;
 };
 
 template <>
-struct attribType<float32_t> {
-  static const int value = GL_FLOAT;
+struct AttribType<float32_t> {
+  static const int32_t value = GL_FLOAT;
 };
 
 template <>
-struct attribType<float64_t> {
-  static const int value = GL_DOUBLE;
+struct AttribType<float64_t> {
+  static const int32_t value = GL_DOUBLE;
 };
 
 template <>
-struct attribType<vec4> {
-  static const int value = attribType<vec4::value_type>::value;
+struct AttribType<vec4> {
+  static const int32_t value = AttribType<vec4::value_type>::value;
 };
 
 template <>
-struct attribType<vec3> {
-  static const int value = attribType<vec3::value_type>::value;
+struct AttribType<vec3> {
+  static const int32_t value = AttribType<vec3::value_type>::value;
 };
 
 template <typename T>
-struct attribNormalized {
+struct AttribNormalized {
   static const bool value = false;
+};
+
+/////////////////
+// buffer type //
+/////////////////
+
+template <typename T>
+struct ArrayBuffer {
+  uint32_t id = 0;
+
+  int32_t valueByteSize() {
+    return sizeof(T);
+  }
+
+  void operator=(std::initializer_list<T> args) {
+    assert(id == 0);
+    glCreateBuffers(1, &id);
+    glNamedBufferData(id, size(args) * sizeof(*data(args)), data(args), GL_STATIC_DRAW);
+  }
+
+  void setLabel(cstring label) {
+    glObjectLabel(GL_BUFFER, id, -1, label);
+  }
+
+  int32_t attribSize() {
+    return AttribSize<T>::value;
+  }
+
+  int32_t attribType() {
+    return AttribType<T>::value;
+  }
+
+  bool attribNormalized() {
+    return AttribNormalized<T>::value;
+  }
 };
 
 //////////////////
 // program data //
 //////////////////
 
-vec4 vertices[] = {
-  {-1,-1, 0, 1},
-  { 1,-1, 0, 1},
-  { 0, 1, 0, 1},
-};
-
-vec4 colors[] = {
-  {1,0,0,1},
-  {0,1,0,1},
-  {0,0,1,1},
-};
-
-uint16_t indices[] = {
-  0,1,2
-};
-
-enum struct BufferId {
-  Vertices,
-  Colors,
-  Indices,
-  Count,
-};
-
-uint32_t buffers[size_t(BufferId::Count)];
+ArrayBuffer<vec4> vertices, colors;
+ArrayBuffer<uint16_t> indices;
 
 enum struct VertexArrayObjectId {
   HelloTriangle,
   Count,
 };
 
-int32_t vertexArrayObjects[size_t(VertexArrayObjectId::Count)];
+uint32_t vertexArrayObjects[size_t(VertexArrayObjectId::Count)];
 
 enum struct ProgramId {
   HelloTriangle,
   Count,
 };
 
+int32_t programLocationsList[4];
+int32_t programLocationOffsets[size_t(ProgramId::Count)] = {0};
 uint32_t programs[size_t(ProgramId::Count)];
-int helloTriangleLocations[4];
 
 void initializeRendering() {
   { // initialize Buffers that are later bound to the attributes
-    glCreateBuffers(size(buffers), buffers);
+    vertices = {
+      {-1,-1, 0, 1},
+      { 1,-1, 0, 1},
+      { 0, 1, 0, 1},
+    };
+    vertices.setLabel("vertices");
 
-    glNamedBufferData(buffers[size_t(BufferId::Vertices)], size(vertices) * sizeof(*data(vertices)), vertices, GL_STATIC_DRAW);
-    glNamedBufferData(buffers[size_t(BufferId::Colors)],   size(colors) * sizeof(*data(colors)), colors, GL_STATIC_DRAW);
-    glNamedBufferData(buffers[size_t(BufferId::Indices)],  size(indices) * sizeof(*data(indices)), indices, GL_STATIC_DRAW);
+    colors = {
+      {1,0,0,1},
+      {0,1,0,1},
+      {0,0,1,1},
+    };
+    colors.setLabel("colors");
 
-    glObjectLabel(GL_BUFFER, buffers[size_t(BufferId::Vertices)], -1, "vertices");
-    glObjectLabel(GL_BUFFER, buffers[size_t(BufferId::Colors)],   -1, "colors");
-    glObjectLabel(GL_BUFFER, buffers[size_t(BufferId::Indices)],  -1, "indices");
+    indices = {
+      0, 1, 2,
+    };
+    indices.setLabel("indices");
   }
 
   { // compile HelloTriangle
@@ -271,10 +296,11 @@ void initializeRendering() {
     glAttachShader(program, fragmentShader);
     glDeleteShader(fragmentShader);
     glLinkProgram(program);
+    glObjectLabel(GL_PROGRAM, program, -1, "HelloTriangle");
 
     programs[size_t(ProgramId::HelloTriangle)] = program;
 
-    int32_t* locations = helloTriangleLocations;
+    int32_t* locations = programLocationsList + programLocationOffsets[size_t(ProgramId::HelloTriangle)];
     locations[0] = glGetUniformLocation(program, "modelView");
     locations[1] = glGetUniformLocation(program, "proj");
     locations[2] = glGetAttribLocation(program, "a_vertex");
@@ -285,10 +311,10 @@ void initializeRendering() {
 
     { // setup vertices attribute
       int32_t loc = locations[2];
-      glVertexArrayVertexBuffer(vao, loc, buffers[size_t(BufferId::Vertices)], 0, sizeof(*data(vertices)));
-      auto attribSizeValue = attribSize<vec4>::value;
-      auto attribTypeValue = attribType<vec4>::value;
-      auto attribNormalizedValue = attribNormalized<vec4>::value;
+      glVertexArrayVertexBuffer(vao, loc, vertices.id, 0, vertices.valueByteSize() );
+      auto attribSizeValue = vertices.attribSize();
+      auto attribTypeValue = vertices.attribType();
+      auto attribNormalizedValue = vertices.attribNormalized();
       glVertexArrayAttribFormat(vao, loc, attribSizeValue, attribTypeValue, attribNormalizedValue, 0);
       glVertexArrayAttribBinding(vao, loc, 0); // bind attribute a_vertex to binding index 0
       glVertexArrayBindingDivisor(vao,     0, 0); // set binding index 0 to divisor 0 (no instancing)
@@ -296,10 +322,10 @@ void initializeRendering() {
     }
     { // setup colors attribute
       int32_t loc = locations[3];
-      glVertexArrayVertexBuffer(vao, loc, buffers[size_t(BufferId::Colors)], 0, sizeof(decltype(*data(colors))));
-      auto attribSizeValue = attribSize<vec4>::value;
-      auto attribTypeValue = attribType<vec4>::value;
-      auto attribNormalizedValue = attribNormalized<vec4>::value;
+      glVertexArrayVertexBuffer(vao, loc, colors.id, 0, colors.valueByteSize());
+      auto attribSizeValue = colors.attribSize();
+      auto attribTypeValue = colors.attribType();
+      auto attribNormalizedValue = colors.attribNormalized();
       glVertexArrayAttribFormat(vao, loc, attribSizeValue, attribTypeValue, attribNormalizedValue, 0);
       glVertexArrayAttribBinding(vao, loc, 1); // bind attribute to binding index 1
       glVertexArrayBindingDivisor(vao,     1, 0);  // set binding index 1 to divisor 0 (no instancing)
@@ -309,7 +335,7 @@ void initializeRendering() {
   }
 }
 
-int main() {
+int32_t main() {
 
   SDL_Init(SDL_INIT_EVERYTHING);
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -357,7 +383,7 @@ int main() {
     float32_t aspect = float32_t(windowWidth) / float32_t(windowHeight);
     proj = glm::perspective(90.0f, aspect, 0.01f, 1000.0f);
   }
-  double time;
+  float64_t time;
   while(runGame) {
 
     while(SDL_PollEvent(&evt)) {
@@ -386,18 +412,18 @@ int main() {
     {
       auto program = programs[size_t(ProgramId::HelloTriangle)];
       auto vao = vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)];
-      int32_t* locations = helloTriangleLocations;
+      int32_t* locations = programLocationsList + programLocationOffsets[size_t(ProgramId::HelloTriangle)];
 
       glUseProgram(program);
       glBindVertexArray(vertexArrayObjects[size_t(VertexArrayObjectId::HelloTriangle)]);
-      glVertexArrayElementBuffer(vao, buffers[size_t(BufferId::Indices)]);
+      glVertexArrayElementBuffer(vao, indices.id);
 
       auto modelViewMat = viewMat * modelMat;
       glProgramUniformMatrix4fv(program, locations[0], 1, false, value_ptr(modelViewMat));
       glProgramUniformMatrix4fv(program, locations[1], 1, false, value_ptr(proj));
 
-      glVertexArrayVertexBuffer(vao, 0, buffers[size_t(BufferId::Vertices)], 0, sizeof(vec4));
-      glVertexArrayVertexBuffer(vao, 1, buffers[size_t(BufferId::Colors)], 0, sizeof(vec4));
+      glVertexArrayVertexBuffer(vao, 0, vertices.id, 0, sizeof(vec4));
+      glVertexArrayVertexBuffer(vao, 1, colors.id, 0, sizeof(vec4));
 
       glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_SHORT, reinterpret_cast<void *>(0));
       glBindVertexArray(0);
