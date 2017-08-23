@@ -17,20 +17,15 @@ machen. Im konkreten beispiel bei OpenGL sieht das wie folgt aus:
 
 Sicht auf die Daten von der c++ Seite:
 
-std::vector<glm::vec4> positions;
-std::vector<glm::vec4> normals;
+    ArrayBuffer<glm::vec4> positions;
+    ArrayBuffer<glm::vec4> normals;
 
 Sicht auf die Daten von der GLSL Seite (kernel):
 
-attribute vec4 position;
-attribute vec4 normal;
+    attribute vec4 position;
+    attribute vec4 normal;
 
 Anbindung der Daten in OpenGL code:
-
-int buffers[2];
-glGenBuffers(buffers, 2);
-glBufferData(buffers[BUFFER_POSITIONS], sizeof(glm::vec4) *
-positions.size(), buffers.data())
 
     SHADING_DSL(R"dsl(
       uniforms {
