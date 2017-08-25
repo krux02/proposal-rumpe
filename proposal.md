@@ -66,13 +66,15 @@ sehr hilfreich weil es viele Schritte für Mipmapping automatisch
 übernimmt. Eine einfache schleife in c++ könnte diesen Teil deshalb
 nicht so einfach ersetzen.
 
-Die Kernidee meiner DSL ist es den shader code (GLSL), dort in den C++
+Die Kernidee meiner DSL ist es den Shadercode (GLSL), dort in den C++
 code zu integrieren, wo die Daten auf die den Shader zugreifen muss, im
-lokalen Scope sind.
+lokalen Scope sind. Der DSL Compiler soll dann die Deklarationen in
+GLSL generieren und die OpenGL Aufrufe in c++, die dazu Notwendig
+sind die Daten an das Shaderprogramm zu übergeben.
 
 Im konkreten Beispiel sieht das wie folgt aus:
 
-Lokale oder globale Variablen in C++ als sicht auf die Daten:
+Lokale oder globale Variablen in C++ als Sicht auf die Daten:
 
     ArrayBuffer<glm::vec4> positions;
     ArrayBuffer<glm::vec4> colors;
@@ -85,7 +87,7 @@ zusammenhängendem Speicher für alle Elemente. Der Hauptunterschied zu
 liegt. Ein ArrayBuffer speichert pro vertex Attribute. `modelViewMat`
 und `projMat` sind Variablen, die zwar veränderbar sind aber pro
 Aufruf des Shaderprogrammes nur noch den selben wert für sowohl
-Vertex-, als auch Fragmentshader haben, und das über alle Vertices and
+Vertex-, als auch Fragmentshader haben, und das über alle Vertices und
 Pixel hinweg.  Diese Daten heißen bei OpenGL `uniform`.
 
 So könnte die Anbindung der Daten an den GLSL code aussehen:
@@ -126,6 +128,12 @@ sind nutzen können. `vertexMain` soll zusätzlich noch die Variablen aus
 `attributes` nutzen können und in die variables aus `vertexOut`
 schreiben können und `fragmentMain` soll aus den Daten aus `vertexOut`
 lesen können.
+
+Im Anhang ist eine Beispieldatei für ein "Hello Triangle"-Programm,
+welche sowohl repräsentativ den DSL code enthält, als auch den code
+den ich für diese DSL generieren würde, damit das Programm auch ein
+valide und ausführbar ist.
+
 
 uniforms:
   Each uniform to the shader is represented here as an
