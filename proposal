@@ -1,10 +1,10 @@
-Sehr geerter Herr Rumpe
+Sehr geehrter Herr Rumpe,
 
-Wie ich schon seit längerem weiß, arbeitet ihr Lehrstuhl schon seit
-Längerem an Monticore, einem Tool für die Entwicklung von _embedded
-DSLs_. Ich habe schon seit längerem die Idee für eine solche DSL, die
-ich dann wenn sie mir die Ehre erweisen und die Kooperation anbieten,
-an ihrem Lehrstuhl als Masterarbeit entwickeln würde.
+schon seit längerem arbeitet ihr Lehrstuhl an Monticore, einem Tool
+für die Entwicklung von _embedded DSLs_. Ich habe schon seit längerem
+ein Konzept für eine solche DSL.  Meine Idee wäre es diese DSL mit
+ihrer Kooperation mit Monticore als Masterarbeit an ihrem Lehrstuhl
+zu entwickeln.
 
 Worum geht es:
 
@@ -12,25 +12,83 @@ Es geht darum, die Entwicklung von Visualisierungen und allgemeinen
 Berechnungen zu beschleunigen. Meiner Erfahrung nach geht immer dann
 wenn ein komplett neuer Renderer für ein beliebiges Problem
 geschrieben werden muss, sehr viel Arbeitszeit darin verloren, die
-Daten aus dem Arbeitsspeicher im Programm auf der GPU genauso verfügbar zu
-machen. Im konkreten beispiel bei OpenGL sieht das wie folgt aus:
+Daten aus dem Arbeitsspeicher im Programm auf der GPU genauso
+verfügbar zu machen. Das Symptom welches daraus resultiert ist, dass
+allgemeine Renderer geschrieben werden, die alles können müssen, und
+beliebig konfigurierbar sind, anstelle von einfachen Renderern, die
+nur das machen und die Dateien verarbeiten, für die sie geschrieben
+sind. Auswirkungen hat dies dann in der Performance, wenn des
+gewünschte Ergebnis nur wenig Anspruch auf Photorealität hat.
 
-Sicht auf die Daten von der c++ Seite:
+Einfach um mal ein Beispiel zu nennen, bei dem ich stark vermute dass
+dieser Zusammenhang hier existiert. Das Spiel Broforce hat triviale
+Grafik, allerdings keine trivialen Ansprüche an die Grafikleistung.
+
+Um die DSL verstehen zu können gebe ich hier noch mal eine kleine
+Zusammenfassing, wie die Rendering-Pipeline funktioniert.
+
+Als aller erstes braucht die Grafikkarte eine Punktwolke aus Daten,
+welche die Vertices der 3D Geometrie (Mesh) repräsentieren. Jeweils drei
+Vertices zusammen ergeben ein Dreieck auf der Oberfläche des
+Mesh. Vertices können beliebige zusätzliche Daten zu ihrer position
+haben, und auch wie die position gespeichert wird ist sache des
+Programmierers, es gibt kein festes Layout dafür.
+
+Als nächstes werden die Vertices im Vertexshader
+verarbeitet. Der Vertexshader ist hier ein Rechenkernel, der auf
+jedem vertex ausgführt wird. Aufgabe des Vertexshaders ist es, die
+Vertexpositionen entsprechend der Kameraposition und der der
+perspektivischen Verzerrung zu transformieren. Bei OpenGL müssen die
+positionen im Bereich [-1; 1] liegen, um sichtbar zu sein. Die
+original Daten bleiben hier unverändert im Speicher, der Vertexshader
+hat hier reinen lesezugriff. Der Vertexshader bestimmt auch, wie die
+anderen Attribute, wie zum Beispiel Texturkoordinaten verarbeitet
+werden.
+
+Die Rasterization-Stage ist ein nicht programmierbarer teil der
+Rendering-Pipeline. Bis hier sind alle Daten nur pro Vertex
+definiert. Dreiecke haben also Daten an allen Ecken definiert, und der
+Rasterizer hat die Aufgabe, diese Daten über das Dreieck
+perspektivisck korrekt zu interpolieren, so dass sie einen Wert pro
+pixel haben.
+
+Der nächste schritt ist der Pixelshader, in OpenGL auch Fragmentshader
+genannt. Dieser berechnet aus seinen Eingaben nun letztendlich die
+Farbe für die Darstellung des Pixels. Auch dies ist ein
+programmierbarer kernel. Dieser Shader übernimmt zum Beispiel die
+Beleuchtung und Texturierung. Besonders für die Texturierung ist die
+Renderingpipeline sehr hilfreich weil es alle nötigen Schritte für die
+Mipmapping übernimmt. Eine einfache schleife in c++ könnte diesen teil
+nicht so einfach ersetzen.
+
+Die Kernidee meiner DSL ist es den shader code (GLSL), dort in den C++
+code zu integrieren, wo die Daten auf die der Shader zugreifen muss, im
+lokalen Scope sind.
+
+Im konkreten Beispiel sieht das wie folgt aus:
+
+Lokale oder globale Variablen in C++ als sicht auf die Daten:
 
     ArrayBuffer<glm::vec4> positions;
     ArrayBuffer<glm::vec4> normals;
+    glm::mat4 modelViewMat;
+    glm::mat4 projMat;
 
-Sicht auf die Daten von der GLSL Seite (kernel):
+ArrayBuffer ist hier ein Typ wie std::vector mit zusammenhängendem
+Speicher für alle elemente. Der Hauptunterschied zu std::vector ist,
+dass der Speicher auf der Grafikkarte liegt. Ein ArrayBuffer speichert
+pro vertex Attribute. `modelViewMat` und `projMat` sind variables, die
+zwar veränderbar sind aber pro aufruf den shaderprogrammes sich nicht
+mehr von vertex zu vertex verändert können. Diese Daten sind _uniforms_.
 
-    attribute vec4 position;
-    attribute vec4 normal;
+So könnte die Anbindung der Daten an den GLSL code sein:
 
-Anbindung der Daten in OpenGL code:
+    // this here is normal c++ code
 
     SHADING_DSL(R"dsl(
       uniforms {
         modelView = modelViewMat;
-        proj = proj;
+        proj = projMat;
       }
       attributs{
         a_vertex = vertices;
@@ -47,6 +105,18 @@ Anbindung der Daten in OpenGL code:
         color = v_color;
       }
     )dsl");
+
+Für c++ ist die DSL einfach nur ein mehrzeiliges Stringliteral. Im
+Block `uniforms` und `attributes`, werden die die Namen der c++
+identifier benutzt um die _uniforms_ und _attributes_ für den shader
+zu definieren. Also von dem Datentyp von modelViewMat (glm::mat4)
+leitet sich das Uniform "uniform mat4 modelView" ab. Von der Variablen
+`vertices` (ArrayBuffer<glm::vec4>) leitet sich das Attribut
+"attribute vec4 a_vertex" ab. In `vertexMain` und `fragmentMain`
+befindet sich GLSL code. Sowohl der code in `vertexMain` als auch in
+`fragmentMain` soll die Symbole die in `uniforms` definiert worden
+sind nutzen können. `vertexMain` soll zusätzlich noch die symbole aus
+`attributes` nutzen können .... hier weiter machen !!!
 
 uniforms:
   Each uniform to the shader is represented here as an
