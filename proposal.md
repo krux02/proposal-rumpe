@@ -6,7 +6,7 @@ ein Konzept für eine solche DSL.  Meine Idee wäre es diese DSL mit
 Ihrer Kooperation mit Monticore als Masterarbeit an Ihrem Lehrstuhl
 zu entwickeln.
 
-# Motivation:
+## Motivation:
 
 Es geht darum, die Entwicklung von Visualisierungen und allgemeinen
 Berechnungen zu beschleunigen.  Meiner Erfahrung nach geht immer dann
