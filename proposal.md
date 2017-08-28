@@ -1,76 +1,77 @@
 # Sehr geehrter Herr Rumpe,
 
-schon seit längerem arbeitet ihr Lehrstuhl an Monticore, einem Tool
+schon seit längerem arbeitet Ihr Lehrstuhl an Monticore, einem Tool
 für die Entwicklung von _embedded DSLs_. Ich habe schon seit längerem
 ein Konzept für eine solche DSL.  Meine Idee wäre es diese DSL mit
-ihrer Kooperation mit Monticore als Masterarbeit an ihrem Lehrstuhl
+Ihrer Kooperation mit Monticore als Masterarbeit an Ihrem Lehrstuhl
 zu entwickeln.
 
-# Worum geht es:
+# Motivation:
 
 Es geht darum, die Entwicklung von Visualisierungen und allgemeinen
-Berechnungen zu beschleunigen. Meiner Erfahrung nach geht immer dann
+Berechnungen zu beschleunigen.  Meiner Erfahrung nach geht immer dann
 wenn ein komplett neuer Renderer für ein beliebiges Problem
-geschrieben werden muss, sehr viel Arbeitszeit darin verloren, die
-Daten aus dem Arbeitsspeicher, welche zur Visualisierung genutzt
-werden sollen, im Programm auf der GPU verfügbar zu machen. Das
-Symptom welches daraus resultiert ist, dass oft allgemeine Renderer
-geschrieben werden, die alles können wollen, und beliebig
-konfigurierbar sind, anstelle von einfachen Renderern, die nur das
-machen und die Dateien verarbeiten, für die sie geschrieben
-wurden. Auswirkungen hat dies dann in der Performance, wenn des
-gewünschte Ergebnis nur wenig Anspruch auf Photorealität hat.
+geschrieben werden muss, sehr viel Entwicklungszeit darin verloren,
+die relevanten Daten von der GPU aus nutzbar zu machen.  Mit
+relevanten Daten meine ich hier Daten, die in Datenstrukturen des
+Hauptprogramms im Arbeitsspeicher liegen.  Das Symptom welches daraus
+resultiert ist, dass oft allgemeine Renderer geschrieben werden, die
+alles können wollen, und beliebig konfigurierbar sind, anstelle von
+einfachen Renderern, die nur das machen wofür sie geschrieben
+wurden. Auswirkungen hat dies dann in der Performance und Komplexität,
+wenn das gewünschte Ergebnis nur wenig Anspruch auf Photorealität hat.
 
 Einfach um mal ein Beispiel zu nennen, bei dem ich stark vermute dass
-dieser Zusammenhang hier existiert. Das Spiel Broforce hat triviale
-Grafik, allerdings keine trivialen Ansprüche an die
-Grafikleistung. Dies kann natürlich auch andere Gründe haben. Aber mit
-der DSL die ich hier vorstelle, wäre es sehr einfach sehr effizienten
-Renderer für solche Daten zu schreiben.
+dieser Zusammenhang hier existiert.  Das Spiel Broforce hat triviale
+Grafik, allerdings keine trivialen Ansprüche an die Grafikleistung.
+Mit der DSL die ich hier vorstelle, wäre es wesentlich einfacher als
+mit üblichen Techniken einen sehr effizienten Renderer für die
+Visualisierung der Spiel-Daten zu entwickeln.
 
-Um die DSL verstehen zu können gebe ich hier noch mal eine kleine
-vereinfachte Zusammenfassung, wie die Rendering-Pipeline funktioniert.
+![Simple rendering with high CPU usage](./broforce-frame.png "Broforce")
 
-Als aller erstes braucht die Grafikkarte eine Punktwolke aus Daten,
+Zum besseren Verständnis der DSL erläutere ich kurz vereinfacht, wie
+die Grafik-Rendering-Pipeline auf modernen GPUs funktioniert.
+
+Zu Beginn benötigt die Grafikkarte eine Punktwolke aus Daten,
 welche die Vertices der 3D Geometrie (Mesh) repräsentieren. Jeweils drei
 Vertices zusammen ergeben ein Dreieck auf der Oberfläche des
-Mesh. Vertices können beliebige zusätzliche Daten zu ihrer Position
-haben, und auch wie die Position gespeichert wird ist Sache des
-Programmierers, es gibt kein festes Layout dafür.
+Mesh. Vertices können neben ihren Koordinates beliebige zusätzliche
+Daten speichern.  Die Kodierung und das Layout dieser _Attribute_ im
+Speicher wird vom Programmierer festgelegt.
 
 Als nächstes werden die Vertices im Vertexshader
-verarbeitet. Der Vertexshader ist hier ein Rechenkernel, der auf
-jedem Vertex ausgeführt wird. Aufgabe des Vertexshaders ist es, die
+verarbeitet. Der Vertexshader ist hier ein Rechenkernel, der für jeden Vertex ausgeführt wird. Aufgabe des Vertexshaders ist es, die
 Vertexpositionen entsprechend der Kameraposition und der der
 perspektivischen Verzerrung zu transformieren. Bei OpenGL müssen die
-Positionen im Bereich [-1; 1] liegen, um sichtbar zu sein. Die
-original Daten bleiben hier unverändert im Speicher, der Vertexshader
-hat hier reinen Lesezugriff. Der Vertexshader bestimmt auch, wie die
-anderen Attribute, wie zum Beispiel Texturkoordinaten verarbeitet
+Positionen in den Bereich [-1; 1] transformiert werden, um sichtbar zu sein. Die
+Eingabedaten bleiben hier unverändert im Speicher. Der Vertexshader
+hat reinen Lesezugriff. Der Vertexshader bestimmt auch, wie die
+anderen Attribute, wie zum Beispiel Texturkoordinaten, verarbeitet
 werden.
 
-Die _Rasterization-Stage_ ist ein nicht programmierbarer teil der
-Rendering-Pipeline. Bis hier sind alle Daten nur pro Vertex
-definiert.  Dreiecke haben also Daten an allen Ecken definiert, und der
-Rasterizer hat die Aufgabe, diese Daten über das Dreieck
-perspektivisch korrekt zu interpolieren, so dass ein Wert pro
-Pixel existiert.
+Die _Rasterization-Stage_ ist ein nicht-programmierbarer teil der
+Rendering-Pipeline. Bis zu dieser Stage sind alle Daten nur pro Vertex
+definiert.  Dreiecke haben ihre Daten an allen Ecken definiert, und
+der Rasterizer hat die Aufgabe, diese Daten über das Dreieck
+perspektivisch korrekt zu interpolieren, so dass anschließend ein Wert
+pro Pixel existiert.
 
 Der nächste Schritt in der Pipeline ist der Fragmentshader (bei
 DirectX auch Pixelshader genannt).  Dieser berechnet aus seinen
-Eingaben nun letztendlich die Farbe für die Darstellung des
+Eingaben nun letztendlich die finale Farbe für die Darstellung des
 Pixels. Auch dies ist ein programmierbarer Kernel mit beliebig vielen
-eingaben. Dieser Shader übernimmt zum Beispiel die Beleuchtung und
-Texturierung. Besonders für die Texturierung ist die Renderingpipeline
-sehr hilfreich weil es viele Schritte für Mipmapping automatisch
+Eingaben.  Der Fragmentshader übernimmt zum Beispiel die Beleuchtung und
+Texturierung.  Besonders für die Texturierung ist die Renderingpipeline
+sehr hilfreich, da dieser viele Schritte für Mipmapping automatisch
 übernimmt. Eine einfache schleife in c++ könnte diesen Teil deshalb
-nicht so einfach ersetzen.
+nicht so leicht ersetzen.
 
 Die Kernidee meiner DSL ist es den Shadercode (GLSL), dort in den C++
-code zu integrieren, wo die Daten auf die den Shader zugreifen muss, im
-lokalen Scope sind. Der DSL Compiler soll dann die Deklarationen in
-GLSL generieren und die OpenGL Aufrufe in c++, die dazu Notwendig
-sind die Daten an das Shaderprogramm zu übergeben.
+code zu integrieren, wo die Shader-Eingabedaten, im lokalen Scope
+liegen. Der DSL Compiler soll dann die Deklarationen in GLSL
+generieren und die OpenGL Aufrufe in c++, die dazu Notwendig sind die
+Daten an das Shaderprogramm zu übergeben.
 
 Im konkreten Beispiel sieht das wie folgt aus:
 
@@ -130,6 +131,6 @@ schreiben können und `fragmentMain` soll aus den Daten aus `vertexOut`
 lesen können.
 
 Im Anhang ist eine Beispieldatei für ein "Hello Triangle"-Programm,
-welche sowohl repräsentativ den DSL code enthält, als auch den code
-den ich für diese DSL generieren würde, damit das Programm auch ein
-valide und ausführbar ist.
+welche sowohl repräsentativ den DSL-Code enthält, als auch den Code
+den ich für diese DSL generieren würde, damit das Programm auch
+korrekt und Ausführbar ist.
